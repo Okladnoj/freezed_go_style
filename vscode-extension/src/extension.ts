@@ -17,15 +17,26 @@ export function activate(context: vscode.ExtensionContext) {
   // Hook into document save to format after dart format
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (document) => {
+      outputChannel.appendLine(`Document saved: ${document.fileName}`);
       if (document.languageId === 'dart' && !isFormatting) {
+        outputChannel.appendLine('Document is Dart file, checking for @FreezedGoStyle...');
         // Quick check if file contains @FreezedGoStyle annotation
         const content = document.getText();
         if (!content.includes('@FreezedGoStyle')) {
+          outputChannel.appendLine('No @FreezedGoStyle annotation found, skipping');
           return; // Skip if no annotation found
         }
 
+        outputChannel.appendLine('@FreezedGoStyle found, starting format...');
         // Format file after dart format has run
         await formatWithGoStyle(document, context);
+      } else {
+        if (document.languageId !== 'dart') {
+          outputChannel.appendLine(`Document is not Dart (${document.languageId}), skipping`);
+        }
+        if (isFormatting) {
+          outputChannel.appendLine('Already formatting, skipping');
+        }
       }
     })
   );
@@ -41,15 +52,53 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
   context.subscriptions.push(formatCommand);
+
+  // Register as document formatter to intercept format commands
+  const formatter = vscode.languages.registerDocumentFormattingEditProvider(
+    'dart',
+    {
+      async provideDocumentFormattingEdits(
+        document: vscode.TextDocument,
+        options: vscode.FormattingOptions,
+        token: vscode.CancellationToken
+      ): Promise<vscode.TextEdit[]> {
+        // Quick check if file contains @FreezedGoStyle annotation
+        const content = document.getText();
+        if (!content.includes('@FreezedGoStyle')) {
+          return []; // Let default formatter handle it
+        }
+
+        // First, run standard dart format
+        try {
+          const filePath = document.fileName;
+          await execAsync(`dart format "${filePath}"`);
+        } catch (e) {
+          outputChannel.appendLine(`dart format error: ${e}`);
+        }
+
+        // Then run our formatter
+        await formatWithGoStyle(document, context);
+
+        // Return empty array - our formatter modifies file directly
+        // VS Code will reload the document
+        return [];
+      }
+    }
+  );
+  context.subscriptions.push(formatter);
 }
 
 async function formatWithGoStyle(document: vscode.TextDocument, context: vscode.ExtensionContext): Promise<void> {
+  outputChannel.appendLine('formatWithGoStyle called');
   if (isFormatting) {
+    outputChannel.appendLine('Already formatting, returning');
     return;
   }
 
   const filePath = document.fileName;
+  outputChannel.appendLine(`Formatting file: ${filePath}`);
   if (!filePath || !filePath.endsWith('.dart')) {
+    outputChannel.appendLine('File is not a Dart file, returning');
     return;
   }
 
@@ -72,8 +121,8 @@ async function formatWithGoStyle(document: vscode.TextDocument, context: vscode.
     // 1. Relative to file being formatted (go up directories looking for freezed_go_style)
     let currentDir = path.dirname(filePath);
     for (let i = 0; i < 5; i++) {
-      searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
       searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+      searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
       currentDir = path.dirname(currentDir);
     }
 
@@ -83,17 +132,17 @@ async function formatWithGoStyle(document: vscode.TextDocument, context: vscode.
       const workspaceRoot = workspaceFolder.uri.fsPath;
 
       // Check directly in bin folder of workspace (for development mode)
-      searchPaths.push(path.join(workspaceRoot, 'bin', 'freezed_go_style'));
       searchPaths.push(path.join(workspaceRoot, 'bin', 'freezed_go_style.dart'));
+      searchPaths.push(path.join(workspaceRoot, 'bin', 'freezed_go_style'));
 
       // Check in subdirectory (monorepo style)
-      searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style'));
       searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+      searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style'));
 
       // Parent of workspace
       const parentDir = path.dirname(workspaceRoot);
-      searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
       searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+      searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
     }
 
     // 4. Check for dart package executable (if installed as dependency)
@@ -151,14 +200,25 @@ async function formatWithGoStyle(document: vscode.TextDocument, context: vscode.
       // Find first existing path
       for (const searchPath of searchPaths) {
         if (fs.existsSync(searchPath)) {
-          cliPath = searchPath;
-          useDartRun = searchPath.endsWith('.dart');
+          const absolutePath = path.resolve(searchPath);
+          const parentDir = path.dirname(absolutePath);
 
-          // If we found a dart script in a 'bin' folder, run from the package root (parent of 'bin')
-          if (useDartRun && path.basename(path.dirname(searchPath)) === 'bin') {
-            workingDir = path.dirname(path.dirname(searchPath));
+          if (path.basename(parentDir) === 'bin') {
+            // If file is in bin/ folder, project root is one level up
+            workingDir = path.dirname(parentDir);
+            if (absolutePath.endsWith('.dart')) {
+              useDartRun = true;
+              // For 'dart run', use relative path from project root
+              cliPath = path.relative(workingDir, absolutePath).replace(/\\/g, '/');
+            } else {
+              useDartRun = false;
+              cliPath = absolutePath;
+            }
           } else {
-            workingDir = path.dirname(searchPath);
+            // If folder is not bin/, use default logic
+            cliPath = absolutePath;
+            workingDir = parentDir;
+            useDartRun = absolutePath.endsWith('.dart');
           }
           break;
         }

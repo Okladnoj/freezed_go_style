@@ -2,7 +2,7 @@
   "name": "freezed-go-style",
   "displayName": "Freezed GoStyle Formatter",
   "description": "Automatically formats Freezed models in Go-style after dart format",
-  "version": "0.0.1",
+  "version": "1.0.1",
   "publisher": "OKJI",
   "icon": "icon.png",
   "license": "MIT",
@@ -50,4 +50,3 @@
   },
   "dependencies": {}
 }
-
