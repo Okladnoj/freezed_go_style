@@ -21,7 +21,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  freezed_go_style: ^1.0.2
+  freezed_go_style: ^1.0.3
 ```
 
 Or install globally:

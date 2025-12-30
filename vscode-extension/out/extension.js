@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
-exports.deactivate = deactivate;
 const vscode = require("vscode");
 const child_process_1 = require("child_process");
 const util_1 = require("util");
@@ -9,8 +8,10 @@ const path = require("path");
 const fs = require("fs");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 let isFormatting = false;
+// Create output channel
+const outputChannel = vscode.window.createOutputChannel('Freezed GoStyle');
 function activate(context) {
-    console.log('Freezed GoStyle extension is now active!');
+    outputChannel.appendLine('Freezed GoStyle extension is now active!');
     // Hook into document save to format after dart format
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
         if (document.languageId === 'dart' && !isFormatting) {
@@ -20,19 +21,19 @@ function activate(context) {
                 return; // Skip if no annotation found
             }
             // Format file after dart format has run
-            await formatWithGoStyle(document);
+            await formatWithGoStyle(document, context);
         }
     }));
     // Register command for manual formatting
     const formatCommand = vscode.commands.registerCommand('freezed-go-style.format', async () => {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'dart') {
-            await formatWithGoStyle(editor.document);
+            await formatWithGoStyle(editor.document, context);
         }
     });
     context.subscriptions.push(formatCommand);
 }
-async function formatWithGoStyle(document) {
+async function formatWithGoStyle(document, context) {
     if (isFormatting) {
         return;
     }
@@ -42,81 +43,162 @@ async function formatWithGoStyle(document) {
     }
     isFormatting = true;
     try {
-        // Find freezed_go_style CLI tool in workspace
-        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-        if (!workspaceFolder) {
-            return;
-        }
-        // Look for freezed_go_style in workspace root or parent directory
-        let workspaceRoot = workspaceFolder.uri.fsPath;
-        // Try to find compiled executable first (much faster)
-        let cliPath = path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style');
+        // Find freezed_go_style CLI tool
+        // Try multiple locations: relative to file, workspace, and parent directories
+        let cliPath = null;
         let useDartRun = false;
-        // If not found, try parent directory
-        if (!fs.existsSync(cliPath)) {
+        let workingDir = path.dirname(filePath);
+        // Search paths to try (in order of preference)
+        const searchPaths = [];
+        // 0. Bundled CLI (if packaged with the extension)
+        // We expect the 'cli' folder to be at the root of the extension installation
+        searchPaths.push(path.join(context.extensionPath, 'cli', 'bin', 'freezed_go_style.dart'));
+        // 1. Relative to file being formatted (go up directories looking for freezed_go_style)
+        let currentDir = path.dirname(filePath);
+        for (let i = 0; i < 5; i++) {
+            searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
+            searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+            currentDir = path.dirname(currentDir);
+        }
+        // 2. Workspace root
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (workspaceFolder) {
+            const workspaceRoot = workspaceFolder.uri.fsPath;
+            // Check directly in bin folder of workspace (for development mode)
+            searchPaths.push(path.join(workspaceRoot, 'bin', 'freezed_go_style'));
+            searchPaths.push(path.join(workspaceRoot, 'bin', 'freezed_go_style.dart'));
+            // Check in subdirectory (monorepo style)
+            searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style'));
+            searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+            // Parent of workspace
             const parentDir = path.dirname(workspaceRoot);
-            const parentCliPath = path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style');
-            if (fs.existsSync(parentCliPath)) {
-                workspaceRoot = parentDir;
-                cliPath = parentCliPath;
+            searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
+            searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+        }
+        // 4. Check for dart package executable (if installed as dependency)
+        // Dependencies usually have their bins exposed in .dart_tool/maven/bin ... wait no, standard dart projects
+        // We can try running `dart run freezed_go_style` directly. If it's in pubspec dependencies, this works.
+        outputChannel.appendLine(`Scanning for freezed_go_style...`);
+        // Check if we can run via 'dart run' (implies it's in pubspec dependencies)
+        // We test this by trying to check version or help
+        if (!cliPath) {
+            try {
+                outputChannel.appendLine('Checking if available via "dart run"...');
+                // We use the workspace root as CWD
+                let runCwd = path.dirname(filePath);
+                const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                if (workspaceFolder) {
+                    runCwd = workspaceFolder.uri.fsPath;
+                }
+                // Try to resolve the package using 'dart pub deps' or simply trying to run it?
+                // Actually, best way is to check pubspec.lock or pubspec.yaml for the dependency
+                const pubspecPath = path.join(runCwd, 'pubspec.yaml');
+                if (fs.existsSync(pubspecPath)) {
+                    const pubspecContent = fs.readFileSync(pubspecPath, 'utf8');
+                    if (pubspecContent.includes('freezed_go_style')) {
+                        outputChannel.appendLine('Found freezed_go_style in pubspec.yaml');
+                        // It is a dependency. We can run it via 'dart run freezed_go_style:main' or just 'dart run freezed_go_style'
+                        // We need to return a special flag or just handle execution differently.
+                        // Let's set a flag that we use 'dart run' command style.
+                        cliPath = 'freezed_go_style'; // Logic marker
+                        useDartRun = true;
+                        workingDir = runCwd;
+                    }
+                    else {
+                        outputChannel.appendLine('freezed_go_style NOT found in pubspec.yaml');
+                    }
+                }
+            }
+            catch (e) {
+                outputChannel.appendLine(`Error checking pubspec: ${e}`);
             }
         }
-        // If executable not found, fall back to dart run (slower)
-        if (!fs.existsSync(cliPath)) {
-            cliPath = path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
-            useDartRun = true;
-            if (!fs.existsSync(cliPath)) {
-                const parentDir = path.dirname(workspaceRoot);
-                const parentCliPath = path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
-                if (fs.existsSync(parentCliPath)) {
-                    workspaceRoot = parentDir;
-                    cliPath = parentCliPath;
+        // If it wasn't found in pubspec, continue searching other paths
+        if (!cliPath || cliPath !== 'freezed_go_style') {
+            // 3. Try to find via which/where (if installed globally)
+            try {
+                const { stdout } = await execAsync('which freezed_go_style 2>/dev/null || where freezed_go_style 2>/dev/null || echo ""');
+                if (stdout && stdout.trim()) {
+                    searchPaths.push(stdout.trim());
+                }
+            }
+            catch {
+                // Ignore errors
+            }
+            // Find first existing path
+            for (const searchPath of searchPaths) {
+                if (fs.existsSync(searchPath)) {
+                    cliPath = searchPath;
+                    useDartRun = searchPath.endsWith('.dart');
+                    // If we found a dart script in a 'bin' folder, run from the package root (parent of 'bin')
+                    if (useDartRun && path.basename(path.dirname(searchPath)) === 'bin') {
+                        workingDir = path.dirname(path.dirname(searchPath));
+                    }
+                    else {
+                        workingDir = path.dirname(searchPath);
+                    }
+                    break;
                 }
             }
         }
-        console.log('Looking for CLI at:', cliPath);
-        console.log('Workspace root:', workspaceRoot);
-        console.log('File path:', filePath);
-        if (!fs.existsSync(cliPath)) {
-            console.error('freezed_go_style CLI not found at:', cliPath);
-            vscode.window.showErrorMessage(`Freezed GoStyle: CLI not found. Expected at ${cliPath}`);
+        outputChannel.appendLine(`Looking for CLI in: ${searchPaths.slice(0, 5).join(', ')}...`);
+        outputChannel.appendLine(`File path: ${filePath}`);
+        if (!cliPath) {
+            outputChannel.appendLine('ERROR: freezed_go_style CLI not found.');
+            const selection = await vscode.window.showErrorMessage(`Freezed GoStyle: CLI not found. Do you want to add it to dev_dependencies?`, 'Yes', 'No');
+            if (selection === 'Yes') {
+                try {
+                    let runCwd = path.dirname(filePath);
+                    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                    if (workspaceFolder) {
+                        runCwd = workspaceFolder.uri.fsPath;
+                    }
+                    outputChannel.appendLine(`Running 'dart pub add --dev freezed_go_style' in ${runCwd}`);
+                    await execAsync('dart pub add --dev freezed_go_style', { cwd: runCwd });
+                    vscode.window.showInformationMessage('Successfully added freezed_go_style. Try saving the file again.');
+                }
+                catch (e) {
+                    vscode.window.showErrorMessage(`Failed to add dependency: ${e.message}`);
+                }
+            }
             return;
         }
-        console.log('CLI found, running formatter...');
+        outputChannel.appendLine(`CLI found at: ${cliPath}`);
+        outputChannel.appendLine(`Using dart run: ${useDartRun}`);
         // Run freezed_go_style (dart format should have already run)
         try {
             const command = useDartRun
                 ? `dart run "${cliPath}" -f "${filePath}"`
                 : `"${cliPath}" -f "${filePath}"`;
-            console.log('Running command:', command);
+            outputChannel.appendLine(`Running command: ${command}`);
+            outputChannel.appendLine(`Working directory: ${workingDir}`);
             const result = await execAsync(command, {
-                cwd: workspaceRoot,
+                cwd: workingDir,
             });
-            console.log('freezed_go_style output:', result.stdout);
+            outputChannel.appendLine(`freezed_go_style output: ${result.stdout}`);
             // Reload document from disk (CLI already saved the formatted file)
             try {
                 // Use revert to reload from disk - this is fast and simple
                 await vscode.commands.executeCommand('workbench.action.files.revert', document.uri);
-                console.log('Document reloaded with formatted content');
+                outputChannel.appendLine('Document reloaded with formatted content');
             }
             catch (updateError) {
-                console.error('Error reloading document:', updateError);
+                outputChannel.appendLine(`Error reloading document: ${updateError}`);
             }
         }
         catch (error) {
             // Log errors for debugging
-            console.error('freezed_go_style error:', error.message);
+            outputChannel.appendLine(`freezed_go_style error: ${error.message}`);
             if (error.stderr) {
-                console.error('freezed_go_style stderr:', error.stderr);
+                outputChannel.appendLine(`freezed_go_style stderr: ${error.stderr}`);
             }
         }
     }
     catch (error) {
-        console.error('Error in freezed_go_style extension:', error);
+        outputChannel.appendLine(`Error in freezed_go_style extension: ${error}`);
     }
     finally {
         isFormatting = false;
     }
 }
-function deactivate() { }
 //# sourceMappingURL=extension.js.map

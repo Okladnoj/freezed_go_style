@@ -8,13 +8,14 @@
 # Change to the root directory of the project
 cd "$(dirname "$0")/.."
 
+Enhance Freezed GoStyle Formatter with verbose logging and improved path handling
 
 # Your comments for the changelog split by "/"
 comments=(
-  "Native executable compilation for fast performance"
-  "Comprehensive test suite"
-  "Enhanced README with badges and icons"
-  "Added keywords and topics for better discoverability on pub.dev"
+  "Added verbose logging for debugging purposes in the formatter and CLI tool"
+  "Improved path resolution for locating the `freezed_go_style` CLI tool, including checks for bundled, workspace, and global installations"
+  "Updated the VS Code extension to provide feedback on the CLI tool's status and errors"
+  "Enhanced the formatting logic to handle comments and annotations more effectively in Dart files"
 )
 
 # Increment the version number

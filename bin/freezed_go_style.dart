@@ -70,8 +70,22 @@ void main(List<String> arguments) {
       exit(1);
     }
 
-    final target = File(path.absolute(targetPath));
-    final isDirectory = Directory(path.absolute(targetPath)).existsSync();
+    final absolutePath = path.absolute(targetPath);
+    final target = File(absolutePath);
+    final isDirectory = Directory(absolutePath).existsSync();
+
+    // Always print basic info to stderr for debugging
+    stderr.writeln('Target path: $targetPath');
+    stderr.writeln('Absolute path: $absolutePath');
+    stderr.writeln('File exists: ${target.existsSync()}');
+    stderr.writeln('Is directory: $isDirectory');
+
+    if (verbose) {
+      print('Target path: $targetPath');
+      print('Absolute path: $absolutePath');
+      print('File exists: ${target.existsSync()}');
+      print('Is directory: $isDirectory');
+    }
 
     if (!target.existsSync() && !isDirectory) {
       print('Error: File or directory not found: $targetPath');
@@ -82,24 +96,31 @@ void main(List<String> arguments) {
     final formatter = FreezedGoStyleFormatter();
     int formattedCount = 0;
 
+    stderr.writeln('Starting formatting...');
+    if (verbose) {
+      print('Starting formatting...');
+    }
+
     if (isDirectory) {
       formattedCount = formatter.formatDirectory(
-        Directory(path.absolute(targetPath)),
+        Directory(absolutePath),
         verbose: verbose,
       );
     } else {
-      if (formatter.formatFile(
-        File(path.absolute(targetPath)),
-        verbose: verbose,
-      )) {
+      if (formatter.formatFile(File(absolutePath), verbose: verbose)) {
         formattedCount = 1;
       }
     }
 
+    stderr.writeln('Formatted count: $formattedCount');
     if (verbose) {
       print('Formatted $formattedCount file(s).');
     } else if (formattedCount > 0) {
       print('✅ Formatted $formattedCount file(s).');
+    } else if (verbose) {
+      print('No files were formatted.');
+    } else {
+      stderr.writeln('No files were formatted.');
     }
   } on FormatException catch (e) {
     print('Error: ${e.message}');

@@ -3,36 +3,80 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/token.dart';
 import 'package:path/path.dart' as path;
 
 import 'parameter_info.dart';
+
+/// Represents a text replacement in source code
+class _Replacement {
+  final int start;
+  final int end;
+  final String newText;
+
+  _Replacement({required this.start, required this.end, required this.newText});
+}
 
 /// Formatter for Freezed models in Go-style
 class FreezedGoStyleFormatter {
   /// Format a single file
   bool formatFile(File file, {bool verbose = false}) {
+    if (verbose) {
+      print('formatFile called for: ${file.path}');
+    }
+
     if (!file.path.endsWith('.dart')) {
+      if (verbose) {
+        print('Skipping non-Dart file: ${file.path}');
+      }
       return false;
     }
 
     try {
-      final collection = AnalysisContextCollection(
-        includedPaths: [path.dirname(file.path)],
+      if (verbose) {
+        print('Creating analysis context for: ${file.path}');
+      }
+
+      // Normalize path to remove .. components
+      final normalizedPath = path.normalize(path.absolute(file.path));
+      final normalizedDir = path.normalize(
+        path.absolute(path.dirname(file.path)),
       );
 
-      final context = collection.contextFor(file.path);
-      final result = context.currentSession.getParsedUnit(file.path);
+      if (verbose) {
+        print('Normalized file path: $normalizedPath');
+        print('Normalized dir path: $normalizedDir');
+      }
+
+      final collection = AnalysisContextCollection(
+        includedPaths: [normalizedDir],
+      );
+
+      final context = collection.contextFor(normalizedPath);
+      final result = context.currentSession.getParsedUnit(normalizedPath);
 
       if (result is! ParsedUnitResult) {
         if (verbose) {
           print('Warning: Could not parse ${file.path}');
+          print('Result type: ${result.runtimeType}');
         }
         return false;
+      }
+
+      if (verbose) {
+        print('Successfully parsed: ${file.path}');
       }
 
       final unit = result.unit;
       final originalContent = file.readAsStringSync();
       final formatted = _formatUnit(unit, originalContent, verbose: verbose);
+
+      if (verbose) {
+        print(
+          'Original length: ${originalContent.length}, Formatted length: ${formatted.length}',
+        );
+        print('Are equal: ${formatted == originalContent}');
+      }
 
       if (formatted != originalContent) {
         file.writeAsStringSync(formatted);
@@ -71,15 +115,92 @@ class FreezedGoStyleFormatter {
     String source, {
     bool verbose = false,
   }) {
-    String result = source;
+    // Collect all replacements first (from end to start to preserve offsets)
+    final replacements = <_Replacement>[];
 
     for (final declaration in unit.declarations) {
       if (declaration is ClassDeclaration) {
-        result = _formatClass(declaration, result, verbose: verbose);
+        final replacement = _formatClassReplacement(
+          declaration,
+          source,
+          verbose: verbose,
+        );
+        if (replacement != null) {
+          replacements.add(replacement);
+        }
       }
     }
 
+    // Apply replacements from end to start
+    replacements.sort((a, b) => b.start.compareTo(a.start));
+
+    String result = source;
+    for (final replacement in replacements) {
+      result =
+          result.substring(0, replacement.start) +
+          replacement.newText +
+          result.substring(replacement.end);
+    }
+
     return result;
+  }
+
+  _Replacement? _formatClassReplacement(
+    ClassDeclaration classDecl,
+    String source, {
+    bool verbose = false,
+  }) {
+    // Check if class has @FreezedGoStyle annotation
+    if (!_hasFreezedGoStyleAnnotation(classDecl)) {
+      return null;
+    }
+
+    if (verbose) {
+      print('Processing class: ${classDecl.name.lexeme}');
+    }
+
+    // Find factory constructors and collect replacements
+    final factoryReplacements = <_Replacement>[];
+
+    for (final member in classDecl.members) {
+      if (member is ConstructorDeclaration && member.factoryKeyword != null) {
+        final replacement = _formatFactoryConstructorReplacement(
+          member,
+          source,
+          verbose: verbose,
+        );
+        if (replacement != null) {
+          factoryReplacements.add(replacement);
+        }
+      }
+    }
+
+    // If no replacements, return null
+    if (factoryReplacements.isEmpty) {
+      return null;
+    }
+
+    // Combine all factory replacements into one class replacement
+    // Sort from end to start
+    factoryReplacements.sort((a, b) => b.start.compareTo(a.start));
+
+    // Apply factory replacements to get new class content
+    String classContent = source.substring(classDecl.offset, classDecl.end);
+    for (final replacement in factoryReplacements) {
+      // Adjust replacement offsets relative to class start
+      final relativeStart = replacement.start - classDecl.offset;
+      final relativeEnd = replacement.end - classDecl.offset;
+      classContent =
+          classContent.substring(0, relativeStart) +
+          replacement.newText +
+          classContent.substring(relativeEnd);
+    }
+
+    return _Replacement(
+      start: classDecl.offset,
+      end: classDecl.end,
+      newText: classContent,
+    );
   }
 
   bool _hasFreezedGoStyleAnnotation(ClassDeclaration classDecl) {
@@ -92,41 +213,19 @@ class FreezedGoStyleFormatter {
     return false;
   }
 
-  String _formatClass(
-    ClassDeclaration classDecl,
-    String source, {
-    bool verbose = false,
-  }) {
-    // Check if class has @FreezedGoStyle annotation
-    if (!_hasFreezedGoStyleAnnotation(classDecl)) {
-      return source;
-    }
-
-    if (verbose) {
-      print('Processing class: ${classDecl.name.lexeme}');
-    }
-
-    String result = source;
-
-    // Find factory constructors
-    for (final member in classDecl.members) {
-      if (member is ConstructorDeclaration && member.factoryKeyword != null) {
-        result = _formatFactoryConstructor(member, result, verbose: verbose);
-      } else if (member is MethodDeclaration &&
-          member.name.lexeme == 'fromJson') {
-        // Skip fromJson methods
-        continue;
-      }
-    }
-
-    return result;
-  }
-
-  String _formatFactoryConstructor(
+  _Replacement? _formatFactoryConstructorReplacement(
     ConstructorDeclaration factory,
     String source, {
     bool verbose = false,
   }) {
+    // Skip fromJson factory constructors
+    if (factory.name?.lexeme == 'fromJson') {
+      if (verbose) {
+        print('  Skipping fromJson factory constructor');
+      }
+      return null;
+    }
+
     if (verbose) {
       print('  Processing factory constructor');
     }
@@ -141,7 +240,7 @@ class FreezedGoStyleFormatter {
       if (verbose) {
         print('    No parameters found, skipping');
       }
-      return source;
+      return null;
     }
 
     return _formatFactoryWithAlignment(
@@ -166,6 +265,38 @@ class FreezedGoStyleFormatter {
 
     for (final param in parameterList.parameters) {
       final annotations = <String>[];
+      final comments = <String>[];
+
+      // Extract preceding comments from tokens
+      // We start from the first token of the parameter (which could be an annotation or the type/name)
+      Token? currentToken = param.beginToken;
+
+      // We look at preceding comments of the first token
+      Token? commentToken = currentToken.precedingComments;
+      while (commentToken != null) {
+        comments.add(commentToken.lexeme.trim());
+        commentToken = commentToken.next;
+      }
+
+      // Also look for comments inside the parameter declaration (e.g. between annotation and type)
+      // This is a heuristic: we scan from beginToken to endToken
+      // IMPORTANT: We only want comments that are "inside" this parameter's range,
+      // but essentially we want to hoist ALL comments found in this parameter's declaration to the top.
+
+      // To avoid duplication, we need to be careful. The precedingComments of the first token
+      // covers everything before the parameter.
+      // Now let's just collect comments attached to subsequent tokens within this parameter.
+      // But we shouldn't scan past the end of this parameter.
+      Token? scanToken = currentToken.next;
+      while (scanToken != null && scanToken.offset <= param.end) {
+        Token? innerComment = scanToken.precedingComments;
+        while (innerComment != null) {
+          comments.add(innerComment.lexeme.trim());
+          innerComment = innerComment.next;
+        }
+        if (scanToken == param.endToken) break;
+        scanToken = scanToken.next;
+      }
 
       // Extract annotations
       if (param.metadata.isNotEmpty) {
@@ -219,6 +350,7 @@ class FreezedGoStyleFormatter {
             type: type,
             name: name,
             isRequired: isRequired,
+            comments: comments,
           ),
         );
       }
@@ -227,14 +359,14 @@ class FreezedGoStyleFormatter {
     return parameters;
   }
 
-  String _formatFactoryWithAlignment(
+  _Replacement? _formatFactoryWithAlignment(
     ConstructorDeclaration factory,
     List<ParameterInfo> parameters,
     String source, {
     bool verbose = false,
   }) {
     if (parameters.isEmpty) {
-      return source;
+      return null;
     }
 
     // Calculate max lengths for alignment
@@ -303,13 +435,31 @@ class FreezedGoStyleFormatter {
     // Get the closing part after last parameter (should be "}) = _ClassName;")
     final lastParamEnd = parameterList.rightParenthesis.offset;
 
-    // Find the end of factory (semicolon)
+    // Find the semicolon after the factory constructor
     final factoryEnd = source.indexOf(';', lastParamEnd);
     if (factoryEnd == -1) {
-      return source; // Cannot format without semicolon
+      if (verbose) {
+        print('        Warning: Could not find semicolon after factory');
+      }
+      return null; // Cannot format without semicolon
     }
 
-    final closingPart = source.substring(lastParamEnd, factoryEnd + 1).trim();
+    // Extract closing part (everything after right parenthesis until semicolon)
+    // This should be ") = _ClassName;" or "}) = _ClassName;"
+    String closingPart = source.substring(lastParamEnd, factoryEnd + 1).trim();
+
+    // Extract just the class name part (e.g., "_ClassName;")
+    // Pattern: ") = _ClassName;" or "}) = _ClassName;"
+    final match = RegExp(r'=\s*([^;]+);').firstMatch(closingPart);
+    if (match != null) {
+      closingPart = '${match.group(1)};';
+    } else {
+      // Fallback: remove all ) and = from start
+      closingPart = closingPart.replaceAll(RegExp(r'^\)+\s*'), '');
+      closingPart = closingPart.replaceFirst(RegExp(r'^=\s*'), '');
+    }
+
+    // closingPart should now be just "_ClassName;"
 
     if (verbose) {
       print('        Closing part: "$closingPart"');
@@ -334,8 +484,12 @@ class FreezedGoStyleFormatter {
     final buffer = StringBuffer();
     buffer.writeln('$factoryDeclaration(${isNamedParameters ? '{' : ''}');
 
-    // Build formatted parameters
     for (final param in parameters) {
+      // Write comments
+      for (final comment in param.comments) {
+        buffer.writeln('$baseIndent$comment');
+      }
+
       buffer.write(baseIndent);
 
       // Write annotations with padding
@@ -364,13 +518,18 @@ class FreezedGoStyleFormatter {
     }
 
     // Close parameters
-    buffer.write('$baseIndent${isNamedParameters ? '}' : ''}) $closingPart');
+    final closingIndent = factoryIndent.replaceAll(RegExp(r'[^\s]'), '');
+    buffer.write(
+      '$closingIndent${isNamedParameters ? '}' : ''}) = $closingPart',
+    );
 
-    // Replace in source
+    // Return replacement
     final formatted = buffer.toString();
-    final before = source.substring(0, factoryStartOffset);
-    final after = source.substring(factoryEnd + 1);
 
-    return before + formatted + after;
+    return _Replacement(
+      start: factoryStartOffset,
+      end: factoryEnd + 1, // Include semicolon
+      newText: formatted,
+    );
   }
 }

@@ -4,12 +4,14 @@ class ParameterInfo {
   final String type; // Parameter type
   final String name; // Parameter name
   final bool isRequired; // Is required parameter
+  final List<String> comments; // Comments associated with this parameter
 
   ParameterInfo({
     required this.annotations,
     required this.type,
     required this.name,
     required this.isRequired,
+    this.comments = const [],
   });
 
   /// Get the formatted annotation block
