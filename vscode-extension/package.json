@@ -1,0 +1,49 @@
+{
+  "name": "freezed-go-style",
+  "displayName": "Freezed GoStyle Formatter",
+  "description": "Automatically formats Freezed models in Go-style after dart format",
+  "version": "0.0.1",
+  "publisher": "freezed-go-style",
+  "icon": "icon.png",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:dart"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "freezed-go-style.format",
+        "title": "Format with Freezed GoStyle"
+      }
+    ],
+    "configuration": {
+      "title": "Freezed GoStyle",
+      "properties": {
+        "freezedGoStyle.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic formatting after dart format"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}
+
