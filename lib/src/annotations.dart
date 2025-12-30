@@ -2,4 +2,3 @@
 class FreezedGoStyle {
   const FreezedGoStyle();
 }
-

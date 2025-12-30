@@ -1,4 +1,4 @@
-library freezed_go_style;
+// Freezed GoStyle Formatter library
 
 export 'src/annotations.dart';
 export 'src/formatter.dart';

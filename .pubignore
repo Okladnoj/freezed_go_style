@@ -1,0 +1,16 @@
+# Exclude VS Code extension from pub.dev package
+vscode-extension/
+
+# Exclude scripts
+scripts/
+
+# Exclude test projects
+*_tester/
+
+# Exclude compiled executables
+bin/freezed_go_style
+!bin/freezed_go_style.dart
+
+# Exclude macOS files
+.DS_Store
+

@@ -28,4 +28,3 @@ class ParameterInfo {
     return annotations.map((a) => a.length).reduce((a, b) => a > b ? a : b);
   }
 }
-

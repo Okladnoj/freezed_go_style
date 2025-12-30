@@ -14,10 +14,13 @@ function activate(context) {
     // Hook into document save to format after dart format
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
         if (document.languageId === 'dart' && !isFormatting) {
-            // Wait for dart format to complete, then run our formatter
-            setTimeout(async () => {
-                await formatWithGoStyle(document);
-            }, 500); // Delay to let dart format finish
+            // Quick check if file contains @FreezedGoStyle annotation
+            const content = document.getText();
+            if (!content.includes('@FreezedGoStyle')) {
+                return; // Skip if no annotation found
+            }
+            // Format file after dart format has run
+            await formatWithGoStyle(document);
         }
     }));
     // Register command for manual formatting
@@ -46,14 +49,29 @@ async function formatWithGoStyle(document) {
         }
         // Look for freezed_go_style in workspace root or parent directory
         let workspaceRoot = workspaceFolder.uri.fsPath;
-        let cliPath = path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
-        // If not found, try parent directory (for cases where test project is opened separately)
+        // Try to find compiled executable first (much faster)
+        let cliPath = path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style');
+        let useDartRun = false;
+        // If not found, try parent directory
         if (!fs.existsSync(cliPath)) {
             const parentDir = path.dirname(workspaceRoot);
-            const parentCliPath = path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
+            const parentCliPath = path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style');
             if (fs.existsSync(parentCliPath)) {
                 workspaceRoot = parentDir;
                 cliPath = parentCliPath;
+            }
+        }
+        // If executable not found, fall back to dart run (slower)
+        if (!fs.existsSync(cliPath)) {
+            cliPath = path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
+            useDartRun = true;
+            if (!fs.existsSync(cliPath)) {
+                const parentDir = path.dirname(workspaceRoot);
+                const parentCliPath = path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart');
+                if (fs.existsSync(parentCliPath)) {
+                    workspaceRoot = parentDir;
+                    cliPath = parentCliPath;
+                }
             }
         }
         console.log('Looking for CLI at:', cliPath);
@@ -67,35 +85,23 @@ async function formatWithGoStyle(document) {
         console.log('CLI found, running formatter...');
         // Run freezed_go_style (dart format should have already run)
         try {
-            const result = await execAsync(`dart run "${cliPath}" -f "${filePath}"`, {
+            const command = useDartRun
+                ? `dart run "${cliPath}" -f "${filePath}"`
+                : `"${cliPath}" -f "${filePath}"`;
+            console.log('Running command:', command);
+            const result = await execAsync(command, {
                 cwd: workspaceRoot,
             });
             console.log('freezed_go_style output:', result.stdout);
-            // Reload document to show changes
-            // Read the file from disk and update the editor
-            setTimeout(async () => {
-                try {
-                    const editor = vscode.window.activeTextEditor;
-                    if (editor && editor.document.fileName === filePath) {
-                        // Read the formatted file from disk
-                        const formattedContent = fs.readFileSync(filePath, 'utf8');
-                        const currentContent = editor.document.getText();
-                        // Only update if content changed
-                        if (formattedContent !== currentContent) {
-                            const edit = new vscode.WorkspaceEdit();
-                            const fullRange = new vscode.Range(editor.document.positionAt(0), editor.document.positionAt(currentContent.length));
-                            edit.replace(editor.document.uri, fullRange, formattedContent);
-                            await vscode.workspace.applyEdit(edit);
-                            console.log('Document updated with formatted content');
-                        }
-                    }
-                }
-                catch (updateError) {
-                    console.error('Error updating document:', updateError);
-                    // Fallback to revert
-                    await vscode.commands.executeCommand('workbench.action.files.revert');
-                }
-            }, 200);
+            // Reload document from disk (CLI already saved the formatted file)
+            try {
+                // Use revert to reload from disk - this is fast and simple
+                await vscode.commands.executeCommand('workbench.action.files.revert', document.uri);
+                console.log('Document reloaded with formatted content');
+            }
+            catch (updateError) {
+                console.error('Error reloading document:', updateError);
+            }
         }
         catch (error) {
             // Log errors for debugging

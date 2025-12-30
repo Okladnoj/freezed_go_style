@@ -6,6 +6,10 @@
   "publisher": "freezed-go-style",
   "icon": "icon.png",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Okladnoj/freezed_go_style.git"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
