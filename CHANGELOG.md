@@ -1,3 +1,11 @@
+## 1.0.4
+
+- Implemented "Lift & Shift" strategy to preserve and align comments in factory constructors
+- Enhanced VS Code extension with better path resolution, logging, and auto-installation prompt
+- Updated README with Marketplace links and optimized support section for pub.dev compatibility
+- Shorter search paths and fixed working directory logic to resolve Dart SDK path issues
+
+
 ## 1.0.3
 
 - Added verbose logging for debugging purposes in the formatter and CLI tool

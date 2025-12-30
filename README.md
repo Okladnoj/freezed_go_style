@@ -21,7 +21,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  freezed_go_style: ^1.0.3
+  freezed_go_style: ^1.0.4
 ```
 
 Or install globally:
@@ -73,13 +73,17 @@ dart run freezed_go_style -d lib/models/
 dart run freezed_go_style -f lib/models/user.dart -v
 ```
 
-#### VS Code / Cursor Extension
+#### VS Code / Cursor / Gravity Extension
 
 Install the **Freezed GoStyle Formatter** extension:
 
-1. Download from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=freezed-go-style.freezed-go-style) (coming soon)
-2. Or install manually from `.vsix` file in the repository
-3. Save your Dart file (Cmd+S / Ctrl+S) - formatting happens automatically!
+- **VS Code Marketplace**: [Install from Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=OKJI.freezed-go-style)
+- **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/OKJI/freezed-go-style) (preferred for **Cursor**, **Gravity**, VSCodium)
+
+How to use:
+1. Install the extension.
+2. Save your Dart file (Cmd+S / Ctrl+S) - formatting happens automatically if `@FreezedGoStyle` is present!
+3. Alternatively, use the command palette and run `Format with Freezed GoStyle`.
 
 The extension:
 - Runs automatically after `dart format` on save
@@ -133,6 +137,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - 📖 **Documentation**: [GitHub](https://github.com/Okladnoj/freezed_go_style)
 - 🐛 **Issues**: [Issues](https://github.com/Okladnoj/freezed_go_style/issues)
 - 📝 **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+
+## Support the project
+
+If you find this package helpful, consider supporting its development:
+
+<a href="https://www.buymeacoffee.com/okji" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy Me A Coffee" height="40"></a>
+
+<a href="https://www.paypal.com/donate?hosted_button_id=NBYVPYB7XDW6A" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal" alt="Donate"></a>
 
 ## License
 
