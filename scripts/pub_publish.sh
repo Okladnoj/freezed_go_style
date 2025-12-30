@@ -11,10 +11,10 @@ cd "$(dirname "$0")/.."
 
 # Your comments for the changelog split by "/"
 comments=(
-  "Go-style alignment for Freezed models with @FreezedGoStyle annotation"
-  "Support for multiple annotations per field with proper alignment"
-  "CLI tool for formatting files and directories"
-  "VS Code/Cursor extension for automatic formatting on save"
+  "Native executable compilation for fast performance"
+  "Comprehensive test suite"
+  "Enhanced README with badges and icons"
+  "Added keywords and topics for better discoverability on pub.dev"
 )
 
 # Increment the version number
@@ -30,7 +30,8 @@ echo -e "\033[32mNew version: $new_version\033[0m"
 
 # Update version in README.md (if it contains version references)
 if grep -q "freezed_go_style.*[0-9]\+\.[0-9]\+\.[0-9]\+" README.md; then
-    sed -i '' "s/freezed_go_style.*[0-9]\+\.[0-9]\+\.[0-9]\+/freezed_go_style: ^$new_version/g" README.md
+    # Use perl for more reliable regex replacement on macOS
+    perl -i -pe "s/freezed_go_style: \^[0-9]+\.[0-9]+\.[0-9]+/freezed_go_style: ^$new_version/g" README.md
     echo -e "\033[32mUpdated version in README.md\033[0m"
 fi
 

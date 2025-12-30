@@ -1,9 +1,13 @@
 name: freezed_go_style
 description: A Dart formatter that applies Go-style alignment to Freezed models, making your code more readable and consistent.
-version: 1.0.1
+version: 1.0.2
 homepage: https://github.com/Okladnoj/freezed_go_style
 repository: https://github.com/Okladnoj/freezed_go_style
 issue_tracker: https://github.com/Okladnoj/freezed_go_style/issues
+
+screenshots:
+  - description: "freezed go style formatter"
+    path: ass/freezed_go_style-logo.png
 
 environment:
   sdk: ^3.10.4
@@ -16,3 +20,23 @@ dependencies:
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.28.0
+
+keywords:
+  - dart
+  - freezed
+  - formatter
+  - code-formatting
+  - alignment
+  - go-style
+
+topics:
+  - formatter
+  - freezed
+  - code-formatting
+  - alignment
+  - dart
+
+executables:
+  freezed_go_style: freezed_go_style
+
+license: MIT

@@ -1,14 +1,19 @@
-# Freezed GoStyle Formatter
+# Freezed GoStyle Formatter 🎨
 
-A Dart formatter that applies Go-style alignment to Freezed models, making your code more readable and consistent.
+<div align="center">
+  <img src="ass/freezed_go_style-logo.png" alt="Freezed GoStyle Formatter Logo" width="400">
+</div>
+
+[![pub package](https://img.shields.io/pub/v/freezed_go_style.svg)](https://pub.dev/packages/freezed_go_style)
+
+**A Dart formatter that applies Go-style alignment to Freezed models, making your code more readable and consistent.**
 
 ## Features
 
-✅ **Go-style alignment** for Freezed factory constructors  
-✅ **Multiple annotations support** with proper column alignment  
-✅ **Automatic formatting** via CLI or VS Code extension  
-✅ **Works with `dart format`** - runs after standard formatting  
-✅ **Zero configuration** - just add `@FreezedGoStyle()` annotation
+- ⚡ **Go-style alignment** - Beautiful column alignment for Freezed factory constructors
+- 🎯 **Multiple annotations support** - Proper alignment of multiple annotations per field
+- 🔄 **Automatic formatting** - Works seamlessly with `dart format` via CLI or VS Code extension
+- ⚙️ **Zero configuration** - Just add `@FreezedGoStyle()` annotation
 
 ## Installation
 
@@ -16,7 +21,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  freezed_go_style: ^1.0.0
+  freezed_go_style: ^1.0.2
 ```
 
 Or install globally:
@@ -83,7 +88,7 @@ The extension:
 
 ## How it works
 
-Before:
+**Before:**
 
 ```dart
 @freezed
@@ -96,7 +101,7 @@ class User with _$User {
 }
 ```
 
-After:
+**After:**
 
 ```dart
 @FreezedGoStyle()
@@ -123,12 +128,12 @@ No configuration needed! Just add the `@FreezedGoStyle()` annotation to classes 
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## Support
+
+- 📖 **Documentation**: [GitHub](https://github.com/Okladnoj/freezed_go_style)
+- 🐛 **Issues**: [Issues](https://github.com/Okladnoj/freezed_go_style/issues)
+- 📝 **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-## Links
-
-- [GitHub Repository](https://github.com/Okladnoj/freezed_go_style)
-- [Issue Tracker](https://github.com/Okladnoj/freezed_go_style/issues)
-- [pub.dev Package](https://pub.dev/packages/freezed_go_style)

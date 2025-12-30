@@ -1,3 +1,11 @@
+## 1.0.2
+
+- Native executable compilation for fast performance
+- Comprehensive test suite
+- Enhanced README with badges and icons
+- Added keywords and topics for better discoverability on pub.dev
+
+
 ## 1.0.1
 
 - Go-style alignment for Freezed models with @FreezedGoStyle annotation
