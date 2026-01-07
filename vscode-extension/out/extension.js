@@ -100,7 +100,7 @@ async function formatWithGoStyle(document, context) {
             searchPaths.push(path.join(currentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
             currentDir = path.dirname(currentDir);
         }
-        // 2. Workspace root
+        // 2. Workspace root and parent directories
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         if (workspaceFolder) {
             const workspaceRoot = workspaceFolder.uri.fsPath;
@@ -110,10 +110,18 @@ async function formatWithGoStyle(document, context) {
             // Check in subdirectory (monorepo style)
             searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
             searchPaths.push(path.join(workspaceRoot, 'freezed_go_style', 'bin', 'freezed_go_style'));
-            // Parent of workspace
-            const parentDir = path.dirname(workspaceRoot);
-            searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
-            searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
+            // Check parent directories (up to 5 levels) for monorepo setups
+            let parentDir = workspaceRoot;
+            for (let i = 0; i < 5; i++) {
+                parentDir = path.dirname(parentDir);
+                searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+                searchPaths.push(path.join(parentDir, 'freezed_go_style', 'bin', 'freezed_go_style'));
+                // Also check in common monorepo structures
+                searchPaths.push(path.join(parentDir, 'packages', 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+                searchPaths.push(path.join(parentDir, 'packages', 'freezed_go_style', 'bin', 'freezed_go_style'));
+                searchPaths.push(path.join(parentDir, 'tools', 'freezed_go_style', 'bin', 'freezed_go_style.dart'));
+                searchPaths.push(path.join(parentDir, 'tools', 'freezed_go_style', 'bin', 'freezed_go_style'));
+            }
         }
         // 4. Check for dart package executable (if installed as dependency)
         // Dependencies usually have their bins exposed in .dart_tool/maven/bin ... wait no, standard dart projects
@@ -165,6 +173,34 @@ async function formatWithGoStyle(document, context) {
             catch {
                 // Ignore errors
             }
+            // 4. Try dart pub global run (if installed globally)
+            if (!cliPath || cliPath !== 'freezed_go_style') {
+                try {
+                    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+                    if (workspaceFolder) {
+                        const runCwd = workspaceFolder.uri.fsPath;
+                        // Test if we can run it via pub global
+                        try {
+                            const { stdout, stderr } = await execAsync('dart pub global run freezed_go_style --help 2>&1', { cwd: runCwd, timeout: 3000 });
+                            const output = (stdout || '') + (stderr || '');
+                            if (output && !output.includes('is not installed') && !output.includes('not found') && !output.includes('Could not find')) {
+                                outputChannel.appendLine('Found freezed_go_style via dart pub global');
+                                cliPath = 'freezed_go_style';
+                                useDartRun = false; // Use 'dart pub global run' instead
+                                workingDir = runCwd;
+                                // We'll use 'dart pub global run' command format later
+                            }
+                        }
+                        catch (e) {
+                            // Ignore timeout and other errors
+                            outputChannel.appendLine(`dart pub global check failed: ${e.message || e}`);
+                        }
+                    }
+                }
+                catch {
+                    // Ignore errors
+                }
+            }
             // Find first existing path
             for (const searchPath of searchPaths) {
                 if (fs.existsSync(searchPath)) {
@@ -197,7 +233,7 @@ async function formatWithGoStyle(document, context) {
         outputChannel.appendLine(`File path: ${filePath}`);
         if (!cliPath) {
             outputChannel.appendLine('ERROR: freezed_go_style CLI not found.');
-            const selection = await vscode.window.showErrorMessage(`Freezed GoStyle: CLI not found. Do you want to add it to dev_dependencies?`, 'Yes', 'No');
+            const selection = await vscode.window.showErrorMessage(`Freezed GoStyle: CLI not found. Do you want to add it to dependencies?`, 'Yes', 'No');
             if (selection === 'Yes') {
                 try {
                     let runCwd = path.dirname(filePath);
@@ -205,8 +241,8 @@ async function formatWithGoStyle(document, context) {
                     if (workspaceFolder) {
                         runCwd = workspaceFolder.uri.fsPath;
                     }
-                    outputChannel.appendLine(`Running 'dart pub add --dev freezed_go_style' in ${runCwd}`);
-                    await execAsync('dart pub add --dev freezed_go_style', { cwd: runCwd });
+                    outputChannel.appendLine(`Running 'dart pub add freezed_go_style' in ${runCwd}`);
+                    await execAsync('dart pub add freezed_go_style', { cwd: runCwd });
                     vscode.window.showInformationMessage('Successfully added freezed_go_style. Try saving the file again.');
                 }
                 catch (e) {
@@ -219,9 +255,17 @@ async function formatWithGoStyle(document, context) {
         outputChannel.appendLine(`Using dart run: ${useDartRun}`);
         // Run freezed_go_style (dart format should have already run)
         try {
-            const command = useDartRun
-                ? `dart run "${cliPath}" -f "${filePath}"`
-                : `"${cliPath}" -f "${filePath}"`;
+            let command;
+            if (cliPath === 'freezed_go_style' && !useDartRun) {
+                // Use dart pub global run
+                command = `dart pub global run freezed_go_style -f "${filePath}"`;
+            }
+            else if (useDartRun) {
+                command = `dart run "${cliPath}" -f "${filePath}"`;
+            }
+            else {
+                command = `"${cliPath}" -f "${filePath}"`;
+            }
             outputChannel.appendLine(`Running command: ${command}`);
             outputChannel.appendLine(`Working directory: ${workingDir}`);
             const result = await execAsync(command, {

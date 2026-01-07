@@ -37,6 +37,21 @@ class User with _$User {
 }
 ```
 
+## Setup
+
+To use the `@FreezedGoStyle()` annotation, you need to import the library:
+
+```dart
+import 'package:freezed_go_style/freezed_go_style.dart';
+```
+
+Add `freezed_go_style` to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  freezed_go_style: last
+```
+
 ## Features
 
 - ✅ Automatically runs after `dart format` (Cmd+S / Ctrl+S)
